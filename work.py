@@ -1,46 +1,53 @@
 import os
 import time
+import shutil
 import subprocess
-from shutil import move
 
-# Directory to monitor for new files
-MONITOR_DIRECTORY = r"C:\Users\ABAYO HIRWA JOVIN\OneDrive\Pictures\Benax"
-PROCESSED_DIRECTORY = os.path.join(MONITOR_DIRECTORY, "processed")
-UPLOAD_ENDPOINT = "https://projects.benax.rw/f/o/r/e/a/c/h/p/r/o/j/e/c/t/s/4e8d42b606f70fa9d39741a93ed0356c/iot_testing_202501/upload.php"
+# Configuration
+WATCH_FOLDER = r"C:\Users\ABAYO HIRWA JOVIN\OneDrive\Pictures\Benax"
+UPLOADED_FOLDER = r"C:\Users\ABAYO HIRWA JOVIN\OneDrive\Pictures\Benax\uploaded"
+UPLOAD_URL = "https://projects.benax.rw/f/o/r/e/a/c/h/p/r/o/j/e/c/t/s/4e8d42b606f70fa9d39741a93ed0356c/iot_testing_202501/upload.php"
+UPLOAD_KEY = "imageFile"
+UPLOAD_INTERVAL = 30  # seconds
 
-# Ensure the processed directory exists
-os.makedirs(os.path.normpath(PROCESSED_DIRECTORY), exist_ok=True)
+def monitor_and_upload():
+    if not os.path.exists(WATCH_FOLDER):
+        print(f"Error: Watch folder {WATCH_FOLDER} does not exist.")
+        return
 
-def upload_image(file_path):
-    try:
-        response = subprocess.run(
-            ["curl", "-X", "POST", "-F", f"imageFile=@{file_path}", UPLOAD_ENDPOINT],
-            capture_output=True,
-            text=True
-        )
-        if response.returncode == 0 and "200" in response.stdout:
-            print(f"Upload successful: {file_path}")
-            return True
-        else:
-            print(f"Upload failed for {file_path}: {response.stderr}")
-            return False
-    except Exception as error:
-        print(f"Error during upload: {error}")
-        return False
+    if not os.path.exists(UPLOADED_FOLDER):
+        os.makedirs(UPLOADED_FOLDER)
 
-def watch_directory():
-    print(f"Watching directory: {MONITOR_DIRECTORY}")
+    print(f"Monitoring folder: {WATCH_FOLDER}\nUploading images to: {UPLOAD_URL}")
+
     while True:
-        pending_files = [
-            file_name for file_name in os.listdir(MONITOR_DIRECTORY)
-            if os.path.isfile(os.path.join(MONITOR_DIRECTORY, file_name))
-        ]
-        for pending_file in pending_files:
-            file_path = os.path.join(MONITOR_DIRECTORY, pending_file)
-            if time.time() - os.path.getmtime(file_path) >= 30:  
-                if upload_image(file_path):
-                    move(file_path, os.path.join(PROCESSED_DIRECTORY, pending_file))
-        time.sleep(10)
+        # Get list of files in the watch folder
+        files = [f for f in os.listdir(WATCH_FOLDER) if os.path.isfile(os.path.join(WATCH_FOLDER, f))]
+
+        for file in files:
+            file_path = os.path.join(WATCH_FOLDER, file)
+            try:
+                # Upload the file using curl
+                print(f"Uploading: {file}")
+                result = subprocess.run(
+                    ["curl", "-X", "POST", "-F", f"{UPLOAD_KEY}=@{file_path}", UPLOAD_URL],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+
+                if result.returncode == 0:
+                    print(f"Successfully uploaded: {file}")
+                    # Move the file to the uploaded folder
+                    shutil.move(file_path, os.path.join(UPLOADED_FOLDER, file))
+                else:
+                    print(f"Failed to upload {file}. Error: {result.stderr}")
+
+            except Exception as e:
+                print(f"Error processing {file}: {e}")
+
+        # Wait before checking for new files
+        time.sleep(UPLOAD_INTERVAL)
 
 if __name__ == "__main__":
-    watch_directory()
+    monitor_and_upload()
